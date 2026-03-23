@@ -12,8 +12,7 @@ process INTERSECT_THINNED {
 
     tag "$meta.id"
 
-    cachedir = params.genotypes_cache ? file(params.genotypes_cache) : workDir
-    storeDir cachedir / "ancestry" / "thinned_intersections"
+    storeDir { (params.genotypes_cache ? file(params.genotypes_cache) : workDir).resolve("ancestry/thinned_intersections/${meta.id}") }
 
     conda "${task.ext.conda}"
 

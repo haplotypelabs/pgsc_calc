@@ -6,8 +6,7 @@ process PLINK2_MAKEBED {
 
     tag "$meta.id"
 
-    cachedir = params.genotypes_cache ? file(params.genotypes_cache) : workDir
-    storeDir cachedir / "ancestry" / "bed"
+    storeDir { (params.genotypes_cache ? file(params.genotypes_cache) : workDir).resolve("ancestry/bed/${meta.id}") }
 
     conda "${task.ext.conda}"
 
