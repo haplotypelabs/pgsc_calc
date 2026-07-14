@@ -71,13 +71,34 @@ workflow ANCESTRY_PROJECT {
     // STEP 1: get overlapping variants across reference and target ------------
     //
 
-    ch_genomes
+    ch_target_qc = ch_genomes
         .join(vmiss, failOnMismatch: true)
         .join(afreq, failOnMismatch: true)
-        .combine( ch_db.map{ it.tail() } ) // (drop hashmap)
-        .flatten()
-        .buffer(size: 9)
-        .set { ch_ref_combined }
+
+    if (params.prepared_ancestry_pvar) {
+        Channel
+            .fromPath(params.prepared_ancestry_pvar, checkIfExists: true)
+            .map { ref_variants ->
+                def matcher = ref_variants.name =~ /(?:^|_)([0-9]+)\.pvar\.zst$/
+                if (!matcher.find()) {
+                    error "Prepared ancestry PVAR filename must end in _<chrom>.pvar.zst: ${ref_variants.name}"
+                }
+                tuple(matcher.group(1), ref_variants)
+            }
+            .set { ch_prepared_ref_variants }
+
+        ch_target_qc
+            .map { tuple(it.first().chrom.toString(), *it) }
+            .join(ch_prepared_ref_variants, failOnMismatch: true)
+            .map { it.tail() }
+            .set { ch_ref_combined }
+    } else {
+        ch_target_qc
+            .combine(ch_db.map { it.last() })
+            .flatten()
+            .buffer(size: 7)
+            .set { ch_ref_combined }
+    }
 
     INTERSECT_VARIANTS ( ch_ref_combined )
     ch_versions = ch_versions.mix(INTERSECT_VARIANTS.out.versions.first())

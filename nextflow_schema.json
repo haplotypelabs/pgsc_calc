@@ -208,6 +208,16 @@
           "description": "Path to reference database. Must be set if --ref_samplesheet is not set.",
           "format": "file-path"
         },
+        "prepared_ancestry_pvar": {
+          "type": "string",
+          "description": "Optional glob for immutable chromosome-split reference PVAR files. Filenames must end in _<chrom>.pvar.zst.",
+          "format": "file-path"
+        },
+        "parallel_relabel_afreq": {
+          "type": "boolean",
+          "default": false,
+          "description": "Relabel the sample-dependent reference AFREQ chromosome-wise in parallel."
+        },
         "ref_samplesheet": {
           "type": "string",
           "description": "Path to a samplesheet that describes the structure of reference data. Must be set if --ref isn't set.",

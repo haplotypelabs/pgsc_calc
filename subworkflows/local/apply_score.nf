@@ -4,6 +4,7 @@
 
 include { RELABEL_SCOREFILES } from '../../modules/local/ancestry/relabel_scorefiles'
 include { RELABEL_AFREQ } from '../../modules/local/ancestry/relabel_afreq'
+include { RELABEL_AFREQ_PARALLEL } from '../../modules/local/ancestry/relabel_afreq_parallel'
 include { PLINK2_SCORE }    from '../../modules/local/plink2_score'
 include { SCORE_AGGREGATE } from '../../modules/local/score_aggregate'
 include { SCORE_REPORT    } from '../../modules/local/score_report'
@@ -85,8 +86,13 @@ workflow APPLY_SCORE {
             .set { ch_afreq }
 
         // map afreq IDs from reference -> target
-        RELABEL_AFREQ ( ch_afreq )
-        ref_afreq = RELABEL_AFREQ.out.relabelled
+        if (params.parallel_relabel_afreq) {
+            RELABEL_AFREQ_PARALLEL ( ch_afreq )
+            ref_afreq = RELABEL_AFREQ_PARALLEL.out.relabelled
+        } else {
+            RELABEL_AFREQ ( ch_afreq )
+            ref_afreq = RELABEL_AFREQ.out.relabelled
+        }
     }
 
     // intersect genomic data with split scoring files -------------------------

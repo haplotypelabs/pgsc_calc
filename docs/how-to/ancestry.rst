@@ -49,3 +49,24 @@ To enable genetic similarity analysis and score normalisation, just include the
         --run_ancestry path/to/reference/pgsc_HGDP+1kGP_v1.tar.zst
 
 The ``--run_ancestry`` parameter requires the path to the reference database.
+
+Prepared reference PVARs
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Repeated runs can avoid decompressing the whole-genome reference PVAR once per
+target chromosome. Create chromosome-split immutable PVARs with
+``scripts/prepare_ancestry_reference.py``, publish them beside its generated
+``manifest.json``, and pass their glob to the pipeline:
+
+.. code-block:: console
+
+    $ nextflow run haplotypelabs/pgsc_calc \
+        --run_ancestry path/to/reference/pgsc_HGDP+1kGP_v1.tar.zst \
+        --prepared_ancestry_pvar 'gs://bucket/reference/v1/*.pvar.zst' \
+        --parallel_relabel_afreq true
+
+Prepared PVAR filenames must end in ``_<chrom>.pvar.zst`` for autosomes 1–22.
+The original reference archive is still required for reference genotypes,
+sample metadata, and relatedness exclusions. ``--parallel_relabel_afreq`` also
+parallelises the sample-dependent AFREQ relabel step; AFREQ output cannot be
+prepared globally because its variant set depends on the target sample.

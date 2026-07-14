@@ -16,7 +16,7 @@ process INTERSECT_VARIANTS {
 
     input:
     tuple val(meta), path(geno), path(pheno), path(variants), path(vmiss), path(afreq),
-        path(ref_geno), path(ref_pheno), path(ref_variants)
+        path(ref_variants)
 
     output:
     tuple val(id), path("${output}.txt.gz"), emit: intersection
