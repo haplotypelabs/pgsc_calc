@@ -90,7 +90,7 @@ workflow ANCESTRY_PROJECT {
         ch_target_qc
             .map { tuple(it.first().chrom.toString(), *it) }
             .join(ch_prepared_ref_variants, failOnMismatch: true)
-            .map { it.tail() }
+            .map { it.tail().flatten() }
             .set { ch_ref_combined }
     } else {
         ch_target_qc
