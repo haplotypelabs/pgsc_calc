@@ -3,6 +3,7 @@
 //
 
 include { RELABEL_SCOREFILES } from '../../modules/local/ancestry/relabel_scorefiles'
+include { RELABEL_SCOREFILES_PARALLEL } from '../../modules/local/ancestry/relabel_scorefiles_parallel'
 include { RELABEL_AFREQ } from '../../modules/local/ancestry/relabel_afreq'
 include { RELABEL_AFREQ_PARALLEL } from '../../modules/local/ancestry/relabel_afreq_parallel'
 include { PLINK2_SCORE }    from '../../modules/local/plink2_score'
@@ -64,9 +65,15 @@ workflow APPLY_SCORE {
             .set { ch_scorefile_relabel_input }
 
         // relabel scoring file ids to match reference format
-        RELABEL_SCOREFILES ( ch_scorefile_relabel_input )
+        if (params.parallel_relabel_scorefiles) {
+            RELABEL_SCOREFILES_PARALLEL ( ch_scorefile_relabel_input )
+            relabelled_scorefiles = RELABEL_SCOREFILES_PARALLEL.out.relabelled
+        } else {
+            RELABEL_SCOREFILES ( ch_scorefile_relabel_input )
+            relabelled_scorefiles = RELABEL_SCOREFILES.out.relabelled
+        }
 
-        RELABEL_SCOREFILES.out.relabelled
+        relabelled_scorefiles
             .transpose()
             .map { annotate_chrom(it) }
             .map { tuple(it.first().subMap('chrom'), it) }

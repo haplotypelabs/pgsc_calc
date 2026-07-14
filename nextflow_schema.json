@@ -218,6 +218,11 @@
           "default": false,
           "description": "Relabel the sample-dependent reference AFREQ chromosome-wise in parallel."
         },
+        "parallel_relabel_scorefiles": {
+          "type": "boolean",
+          "default": false,
+          "description": "Relabel reference scorefiles chromosome-wise in parallel."
+        },
         "ref_samplesheet": {
           "type": "string",
           "description": "Path to a samplesheet that describes the structure of reference data. Must be set if --ref isn't set.",
