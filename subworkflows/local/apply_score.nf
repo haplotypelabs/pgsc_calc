@@ -21,6 +21,7 @@ workflow APPLY_SCORE {
 
     main:
     ch_versions = Channel.empty()
+    scoring_ref_afreq = ref_afreq
 
     scorefiles
         .flatMap { annotate_scorefiles(it) }
@@ -86,19 +87,23 @@ workflow APPLY_SCORE {
             .map { it.tail().flatten() }
             .set { ch_apply_ref }
 
-        // [meta, file, [matches]]
-        ch_grouped_intersections
-            .combine( ref_afreq )
-            .map{ [it.first(), it.last(), it[1]] }
-            .set { ch_afreq }
+        // Prepared samples already contain the immutable, target-labelled
+        // reference frequencies. The cold path keeps the existing relabel step.
+        if (!params.prepared_sample_dir) {
+            // [meta, file, [matches]]
+            ch_grouped_intersections
+                .combine( ref_afreq )
+                .map{ [it.first(), it.last(), it[1]] }
+                .set { ch_afreq }
 
-        // map afreq IDs from reference -> target
-        if (params.parallel_relabel_afreq) {
-            RELABEL_AFREQ_PARALLEL ( ch_afreq )
-            ref_afreq = RELABEL_AFREQ_PARALLEL.out.relabelled
-        } else {
-            RELABEL_AFREQ ( ch_afreq )
-            ref_afreq = RELABEL_AFREQ.out.relabelled
+            // map afreq IDs from reference -> target
+            if (params.parallel_relabel_afreq) {
+                RELABEL_AFREQ_PARALLEL ( ch_afreq )
+                scoring_ref_afreq = RELABEL_AFREQ_PARALLEL.out.relabelled
+            } else {
+                RELABEL_AFREQ ( ch_afreq )
+                scoring_ref_afreq = RELABEL_AFREQ.out.relabelled
+            }
         }
     }
 
@@ -113,7 +118,7 @@ workflow APPLY_SCORE {
         .combine( ch_target_scorefile, by: 0 )
         .map { it.tail().flatten() }
         .mix( ch_apply_ref ) // add reference genomes!
-        .combine( ref_afreq.map { it.last() } ) // add allelic frequencies
+        .combine( scoring_ref_afreq.map { it.last() } ) // add allelic frequencies
         .dump(tag: 'ready_to_score', pretty: true)
         .set { ch_apply }
 

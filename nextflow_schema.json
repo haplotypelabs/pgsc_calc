@@ -75,6 +75,15 @@
           "type": "string",
           "description": "Path to a directory that can store relabelled genotypes (and the reference panel intersections and PCA with --run_ancestry) to speed up new PGS calculations on previously harmonized samples",
           "format": "directory-path"
+        },
+        "prepared_sample_dir": {
+          "type": "string",
+          "description": "Directory containing immutable score-independent prepared sample artifacts.",
+          "format": "directory-path"
+        },
+        "prepared_sample_id": {
+          "type": "string",
+          "description": "Sampleset ID stored in prepared_sample_dir. Required with --prepared_sample_dir."
         }
       }
     },

@@ -11,6 +11,7 @@ include { INPUT_CHECK          } from '../subworkflows/local/input_check'
 include { MAKE_COMPATIBLE      } from '../subworkflows/local/make_compatible'
 include { MATCH                } from '../subworkflows/local/match'
 include { ANCESTRY_PROJECT  } from '../subworkflows/local/ancestry/ancestry_project'
+include { PREPARED_SAMPLE   } from '../subworkflows/local/ancestry/prepared_sample'
 include { APPLY_SCORE          } from '../subworkflows/local/apply_score'
 include { REPORT               } from '../subworkflows/local/report'
 include { DUMPSOFTWAREVERSIONS } from '../modules/local/dumpsoftwareversions'
@@ -23,6 +24,11 @@ include { DUMPSOFTWAREVERSIONS } from '../modules/local/dumpsoftwareversions'
 
 workflow PGSCCALC {
     ch_versions = Channel.empty()
+    use_prepared_sample = params.prepared_sample_dir ? true : false
+
+    if (use_prepared_sample && !params.run_ancestry) {
+        error "--prepared_sample_dir requires --run_ancestry"
+    }
 
     run_ancestry_bootstrap = true
     run_input_check = true
@@ -203,7 +209,7 @@ workflow PGSCCALC {
     // SUBWORKFLOW: Make scoring file and target genomic data compatible
     //
 
-    if (run_make_compatible) {
+    if (run_make_compatible && !use_prepared_sample) {
         MAKE_COMPATIBLE (
             INPUT_CHECK.out.geno,
             INPUT_CHECK.out.pheno,
@@ -212,6 +218,22 @@ workflow PGSCCALC {
 
         )
         ch_versions = ch_versions.mix(MAKE_COMPATIBLE.out.versions)
+    }
+
+    target_geno = Channel.empty()
+    target_pheno = Channel.empty()
+    target_variants = Channel.empty()
+    intersection = Channel.empty()
+    ref_geno = Channel.empty()
+    ref_pheno = Channel.empty()
+    ref_var = Channel.empty()
+    projections = Channel.empty()
+    relatedness = Channel.empty()
+
+    if (run_make_compatible && !use_prepared_sample) {
+        target_geno = target_geno.mix(MAKE_COMPATIBLE.out.geno)
+        target_pheno = target_pheno.mix(MAKE_COMPATIBLE.out.pheno)
+        target_variants = target_variants.mix(MAKE_COMPATIBLE.out.variants)
     }
 
 
@@ -228,29 +250,49 @@ workflow PGSCCALC {
     intersect_count = Channel.fromPath(optional_intersect_count, checkIfExists: true)
 
     if (run_ancestry_assign) {
-        intersection = Channel.empty()
-        ref_geno = Channel.empty()
-        ref_pheno = Channel.empty()
-        ref_var = Channel.empty()
+        if (use_prepared_sample) {
+            PREPARED_SAMPLE (
+                INPUT_CHECK.out.vcf,
+                ch_reference,
+                params.target_build
+            )
+            ch_versions = ch_versions.mix(PREPARED_SAMPLE.out.versions)
+            target_geno = target_geno.mix(PREPARED_SAMPLE.out.geno)
+            target_pheno = target_pheno.mix(PREPARED_SAMPLE.out.pheno)
+            target_variants = target_variants.mix(PREPARED_SAMPLE.out.variants)
+            intersection = intersection.mix(PREPARED_SAMPLE.out.intersection)
+            ref_geno = ref_geno.mix(PREPARED_SAMPLE.out.ref_geno)
+            ref_pheno = ref_pheno.mix(PREPARED_SAMPLE.out.ref_pheno)
+            ref_var = ref_var.mix(PREPARED_SAMPLE.out.ref_var)
+            intersect_count = PREPARED_SAMPLE.out.intersect_count
+            projections = projections.mix(PREPARED_SAMPLE.out.projections)
+            relatedness = relatedness.mix(PREPARED_SAMPLE.out.relatedness)
 
-        ANCESTRY_PROJECT (
-            MAKE_COMPATIBLE.out.geno,
-            MAKE_COMPATIBLE.out.pheno,
-            MAKE_COMPATIBLE.out.variants,
-            MAKE_COMPATIBLE.out.vmiss,
-            MAKE_COMPATIBLE.out.afreq,
-            ch_reference,
-            params.target_build
-        )
-        ch_versions = ch_versions.mix(ANCESTRY_PROJECT.out.versions)
-        intersection = intersection.mix(ANCESTRY_PROJECT.out.intersection)
-        ref_geno = ref_geno.mix(ANCESTRY_PROJECT.out.ref_geno)
-        ref_pheno = ref_pheno.mix(ANCESTRY_PROJECT.out.ref_pheno)
-        ref_var = ref_var.mix(ANCESTRY_PROJECT.out.ref_var)
-        intersect_count = ANCESTRY_PROJECT.out.intersect_count
+            if (params.load_afreq) {
+                ref_afreq = PREPARED_SAMPLE.out.ref_afreq
+            }
+        } else {
+            ANCESTRY_PROJECT (
+                target_geno,
+                target_pheno,
+                target_variants,
+                MAKE_COMPATIBLE.out.vmiss,
+                MAKE_COMPATIBLE.out.afreq,
+                ch_reference,
+                params.target_build
+            )
+            ch_versions = ch_versions.mix(ANCESTRY_PROJECT.out.versions)
+            intersection = intersection.mix(ANCESTRY_PROJECT.out.intersection)
+            ref_geno = ref_geno.mix(ANCESTRY_PROJECT.out.ref_geno)
+            ref_pheno = ref_pheno.mix(ANCESTRY_PROJECT.out.ref_pheno)
+            ref_var = ref_var.mix(ANCESTRY_PROJECT.out.ref_var)
+            intersect_count = ANCESTRY_PROJECT.out.intersect_count
+            projections = projections.mix(ANCESTRY_PROJECT.out.projections)
+            relatedness = relatedness.mix(ANCESTRY_PROJECT.out.relatedness)
 
-        if (params.load_afreq) {
-            ref_afreq = ANCESTRY_PROJECT.out.ref_afreq
+            if (params.load_afreq) {
+                ref_afreq = ANCESTRY_PROJECT.out.ref_afreq
+            }
         }
     }
 
@@ -258,13 +300,10 @@ workflow PGSCCALC {
     // SUBWORKFLOW: Match scoring files against target genomes
     //
     if (run_match) {
-        if (run_ancestry_assign) {
-            // intersected variants ( across ref & target ) are an optional input
-            intersection = ANCESTRY_PROJECT.out.intersection
-        } else {
+        if (!run_ancestry_assign) {
             dummy_input = Channel.of(optional_input) // dummy file that doesn't exist
             // associate each sampleset with the dummy file
-            MAKE_COMPATIBLE.out.geno.map {
+            target_geno.map {
                 def meta = [:].plus(it[0])
                 meta = meta.subMap(['id'])
                 // one dummy file for groupTuple() size in match subworkflow
@@ -277,9 +316,9 @@ workflow PGSCCALC {
         }
 
         MATCH (
-            MAKE_COMPATIBLE.out.geno,
-            MAKE_COMPATIBLE.out.pheno,
-            MAKE_COMPATIBLE.out.variants,
+            target_geno,
+            target_pheno,
+            target_variants,
             INPUT_CHECK.out.scorefiles,
             intersection
         )
@@ -293,21 +332,21 @@ workflow PGSCCALC {
 
     if (run_apply_score) {
         if (run_ancestry_assign) {
-            MAKE_COMPATIBLE.out.geno
+            target_geno
                 .mix( ref_geno )
                 .set { ch_geno }
 
-            MAKE_COMPATIBLE.out.pheno
+            target_pheno
                 .mix( ref_pheno )
                 .set { ch_pheno }
 
-            MAKE_COMPATIBLE.out.variants
+            target_variants
                 .mix( ref_var )
                 .set { ch_variants }
         } else {
-            MAKE_COMPATIBLE.out.geno.set { ch_geno }
-            MAKE_COMPATIBLE.out.pheno.set { ch_pheno }
-            MAKE_COMPATIBLE.out.variants.set { ch_variants }
+            target_geno.set { ch_geno }
+            target_pheno.set { ch_pheno }
+            target_variants.set { ch_variants }
         }
 
         APPLY_SCORE (
@@ -322,13 +361,9 @@ workflow PGSCCALC {
     }
 
     if (run_report) {
-        projections = Channel.empty()
-        relatedness = Channel.empty()
         report_pheno = Channel.empty()
 
         if (run_ancestry_assign) {
-            projections = projections.mix(ANCESTRY_PROJECT.out.projections)
-            relatedness = relatedness.mix(ANCESTRY_PROJECT.out.relatedness)
             report_pheno = report_pheno.mix(ref_pheno)
         }
 
