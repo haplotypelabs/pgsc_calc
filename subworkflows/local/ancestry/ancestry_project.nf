@@ -88,7 +88,7 @@ workflow ANCESTRY_PROJECT {
             .set { ch_prepared_ref_variants }
 
         ch_target_qc
-            .map { tuple(it.first().chrom.toString(), *it) }
+            .map { [it.first().chrom.toString()] + it }
             .join(ch_prepared_ref_variants, failOnMismatch: true)
             .map { it.tail().flatten() }
             .set { ch_ref_combined }
